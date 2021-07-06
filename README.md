@@ -1,0 +1,1 @@
+This repository contains all relevant parts to deploy OWASP ZAP on OpenShift.
