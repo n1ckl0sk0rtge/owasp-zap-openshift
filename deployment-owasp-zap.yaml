@@ -1,0 +1,111 @@
+kind: Template
+apiVersion: template.openshift.io/v1
+metadata:
+  name: owasp-zap-deployment-template
+  annotations:
+    openshift.io/display-name: OWASP ZAP Deployment Template
+    description: A template to deploy OWASP ZAP
+    iconClass: icon-cube
+    tags: owasp-zap-deployment-template
+objects:
+  - apiVersion: image.openshift.io/v1
+    kind: ImageStream
+    metadata:
+      labels:
+        build: owasp-zap
+      name: owasp-zap-for-openshift
+      namespace: ${NAMESPACE_BUILD}
+    spec: 
+      tags:
+      - from:
+          kind: DockerImage
+          name: nicklaskoertgeibm/zap2openshift:latest
+        name: latest
+  - apiVersion: apps.openshift.io/v1
+    kind: DeploymentConfig
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: owasp-zap
+      name: owasp-zap
+      namespace: ${NAMESPACE_BUILD}
+    spec:
+      replicas: 1
+      revisionHistoryLimit: 10
+      selector:
+        app: owasp-zap
+        deploymentconfig: owasp-zap
+      strategy:
+        activeDeadlineSeconds: 21600
+        resources: {}
+        rollingParams:
+          intervalSeconds: 1
+          maxSurge: 25%
+          maxUnavailable: 25%
+          timeoutSeconds: 600
+          updatePeriodSeconds: 1
+        type: Rolling
+      template:
+        metadata:
+          creationTimestamp: null
+          labels:
+            app: owasp-zap
+            deploymentconfig: owasp-zap
+        spec:
+          containers:
+          - image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE_BUILD}/owasp-zap-for-openshift:latest
+            imagePullPolicy: Always
+            name: owasp-zap
+            command:
+            - zap.sh
+            - '-daemon'
+            - '-host'
+            - 0.0.0.0
+            - '-port'
+            - '8080'
+            - '-config'
+            - api.addrs.addr.name=.*
+            - '-config'
+            - api.addrs.addr.regex=true
+            ports:
+            - containerPort: 8080
+              protocol: TCP
+            resources: {}
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+          dnsPolicy: ClusterFirst
+          restartPolicy: Always
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+      test: false
+      triggers:
+      - type: ConfigChange
+      - imageChangeParams:
+          automatic: true
+          containerNames:
+          - owasp-zap
+          from:
+            kind: ImageStreamTag
+            name: owasp-zap-for-openshift:latest
+            namespace: ${NAMESPACE_BUILD}
+        type: ImageChange
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: owasp-zap-service
+      namespace: ${NAMESPACE_BUILD}
+      annotations:
+        description: Exposes and load balances the OWASP Zap pods
+    spec:
+      ports:
+      - name: owasp-zap-service-port
+        port: 8080
+        targetPort: 8080
+      selector:
+        name: owasp-zap
+parameters:
+  - name: NAMESPACE_BUILD
+    displayName: OWASP Zap
+    description: The name assigned to all objects and the related imagestream.
+    required: true
