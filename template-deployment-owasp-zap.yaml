@@ -14,12 +14,12 @@ objects:
       labels:
         build: owasp-zap
       name: owasp-zap-for-openshift
-      namespace: ${NAMESPACE_BUILD}
+      namespace: ${NAMESPACE}
     spec: 
       tags:
       - from:
           kind: DockerImage
-          name: nicklaskoertgeibm/zap2openshift:latest
+          name: ${IMAGE_SOURCE}
         name: latest
   - apiVersion: apps.openshift.io/v1
     kind: DeploymentConfig
@@ -28,7 +28,7 @@ objects:
       labels:
         app: owasp-zap
       name: owasp-zap
-      namespace: ${NAMESPACE_BUILD}
+      namespace: ${NAMESPACE}
     spec:
       replicas: 1
       revisionHistoryLimit: 10
@@ -53,7 +53,7 @@ objects:
             deploymentconfig: owasp-zap
         spec:
           containers:
-          - image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE_BUILD}/owasp-zap-for-openshift:latest
+          - image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/owasp-zap-for-openshift:latest
             imagePullPolicy: Always
             name: owasp-zap
             command:
@@ -67,10 +67,18 @@ objects:
             - api.addrs.addr.name=.*
             - '-config'
             - api.addrs.addr.regex=true
+            - '-config'
+            - api.key=${API_KEY}
             ports:
             - containerPort: 8080
               protocol: TCP
-            resources: {}
+            resources: 
+              requests:
+                memory: "300Mi"
+                cpu: "100m"
+              limits:
+                memory: "500Mi"
+                cpu: "300m"
             terminationMessagePath: /dev/termination-log
             terminationMessagePolicy: File
           dnsPolicy: ClusterFirst
@@ -88,24 +96,35 @@ objects:
           from:
             kind: ImageStreamTag
             name: owasp-zap-for-openshift:latest
-            namespace: ${NAMESPACE_BUILD}
+            namespace: ${NAMESPACE}
         type: ImageChange
   - apiVersion: v1
     kind: Service
     metadata:
       name: owasp-zap-service
-      namespace: ${NAMESPACE_BUILD}
+      namespace: ${NAMESPACE}
       annotations:
         description: Exposes and load balances the OWASP Zap pods
+      labels:
+        name: owasp-zap-service
     spec:
       ports:
       - name: owasp-zap-service-port
         port: 8080
         targetPort: 8080
       selector:
-        name: owasp-zap
+        app: owasp-zap
+        deploymentconfig: owasp-zap
 parameters:
-  - name: NAMESPACE_BUILD
-    displayName: OWASP Zap
-    description: The name assigned to all objects and the related imagestream.
+  - name: NAMESPACE
+    displayName: Namespace for Deployment
+    description: The namespace assigned to all objects and the related imagestream.
+    required: true
+  - name: IMAGE_SOURCE
+    displayName: Image Source
+    description: The public image source (dockerhub, ...) where the image stream ca find the image.
+    required: true
+  - name: API_KEY
+    displayName: ZAP Api Key 
+    description: The API key must be specified on all API actions and some other operations. The API key is used to prevent malicious sites from accessing ZAP API.
     required: true
